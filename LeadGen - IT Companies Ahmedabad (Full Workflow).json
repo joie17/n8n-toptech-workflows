@@ -1,0 +1,269 @@
+{
+  "name": "LeadGen - IT Companies Ahmedabad (Full Workflow)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3833439a-ceca-4c85-a1dc-80d7abf7497f",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.apify.com/v2/acts/compass~google-maps-scraper/run-sync-get-dataset-items?token={{ $credentials.apify.token }}",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "f7bd9d7e-6247-4871-9cf5-8afd8b1fc378",
+      "name": "Fetch Leads (Apify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        160
+      ],
+      "retryOnFail": false,
+      "executeOnce": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\\nfor (const it of items) {\\n  const j = it.json;\\n  const website = j.website || j.websiteUrl || j.websiteUri || j.url || '';\\n  let domain = '';\\n  try { if (website) domain = (new URL(website)).hostname.replace(/^www\\\\./,''); } catch(e) {}\\n  if (!domain && j.email) domain = j.email.split('@')[1] || '';\\n  out.push({ json: {\\n    id: j.placeId || j.id || '',\\n    company_name: j.title || j.name || '',\\n    email: (j.emails && j.emails[0]) || j.email || '',\\n    website: website,\\n    domain: domain,\\n    source: 'Apify - Google Maps',\\n    status: 'pending',\\n    added_at: new Date().toISOString()\\n  }});\\n}\\nreturn out;"
+      },
+      "id": "d9451952-63f6-41eb-b07e-b800565d8bc9",
+      "name": "Parse Leads",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "1Bfg1nsyRhVN0inT1t64CD2RnxnjDm_Gz9rkTBSKGL8g",
+        "range": "Leads!A:L",
+        "options": {}
+      },
+      "id": "1a6a51ed-d548-43e6-8532-9560e1e1fa85",
+      "name": "Append to Leads Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        48,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website || `https://${$json.domain}` }}",
+        "responseFormat": "string",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f138df2e-b8b2-4daf-a1f0-1cdeff21920e",
+      "name": "Scrape Homepage (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        48,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const text = (items[0].json && items[0].json.body) || (items[0].binary && items[0].binary.data && items[0].binary.data.toString()) || items[0].json || '';\\n// very simple plain-text fallback: strip tags\\nconst plain = (typeof text === 'string') ? text.replace(/<script[\\\\s\\\\S]*?<\\\\/script>/g,'').replace(/<style[\\\\s\\\\S]*?<\\\\/style>/g,'').replace(/<[^>]+>/g,' ') : '';\\nreturn [{ json: { page_text: plain.substring(0, 8000) } }];"
+      },
+      "id": "a63ab56e-1e32-42de-a6a1-479d48f95b9b",
+      "name": "Extract Text (Function)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        288,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api-inference.huggingface.co/models/google/flan-t5-small",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "e2b7e4ab-4e93-4a5d-b6a2-2b74b81c0f12",
+      "name": "HF - Summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        528,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const summ = (items[0].json && items[0].json[0] && items[0].json[0].generated_text) || (items[0].json && items[0].json[0]) || '';\nconst company = $json.company_name || $json.company || 'there';\nconst emailHtml = '<html>\\n  <body>\\n    <h2>Hi ' + company + ',</h2>\\n    <p>' + summ + '</p>\\n    <p>I\\'m from E2M — we help IT companies improve online visibility. Would you be open to a quick 15-minute call?</p>\\n    <p><a href=\"mailto:contact@e2m.example?subject=Quick%20call\">Reply to schedule</a></p>\\n  </body>\\n</html>';\nreturn [{ json: { email_html: emailHtml, summary_text: summ } }];"
+      },
+      "id": "e9e5710c-651e-4387-b0f1-83518d73bcc0",
+      "name": "Create Email (Function)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        768,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "1Bfg1nsyRhVN0inT1t64CD2RnxnjDm_Gz9rkTBSKGL8g",
+        "range": "Leads!A:L",
+        "options": {}
+      },
+      "id": "853d2cbb-1250-4b71-9ca6-d363a23b1199",
+      "name": "Update Lead Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "1Bfg1nsyRhVN0inT1t64CD2RnxnjDm_Gz9rkTBSKGL8g",
+        "range": "Error Logs!A:C",
+        "options": {}
+      },
+      "id": "1da1a4e7-1414-445b-828c-f5e6848c1309",
+      "name": "Append Error Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [
+        48,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { summary_update: true } }];"
+      },
+      "id": "dc78978b-929b-4fda-ab05-032604afac8c",
+      "name": "Summary Updater",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        240
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Fetch Leads (Apify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Leads (Apify)": {
+      "main": [
+        [
+          {
+            "node": "Parse Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Leads": {
+      "main": [
+        [
+          {
+            "node": "Append to Leads Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Scrape Homepage (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Homepage (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Extract Text (Function)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text (Function)": {
+      "main": [
+        [
+          {
+            "node": "HF - Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF - Summarize": {
+      "main": [
+        [
+          {
+            "node": "Create Email (Function)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Email (Function)": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Summary Updater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "9517b296-99f8-4229-aedf-af4e073e2a39",
+  "meta": {
+    "instanceId": "0dba579fd3524b78a20f19ad2d9e3a52d7b03522f967be34d2fa0a2617d110d9"
+  },
+  "id": "vYqC0STKXhN8Xv4X",
+  "tags": []
+}

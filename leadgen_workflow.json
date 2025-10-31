@@ -1,0 +1,63 @@
+{
+  "name": "Lead Generation Workflow - IT Companies Ahmedabad",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.apify.com/v2/acts/compass~google-maps-scraper/run-sync-get-dataset-items?token=YOUR_APIFY_TOKEN",
+        "method": "POST",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "searchStringsArray",
+              "value": "[\"IT companies in Ahmedabad\"]"
+            },
+            {
+              "name": "maxCrawledPlacesPerSearch",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "name": "Fetch Leads (Apify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "\nconst results = [];\nfor (const item of items) {\n  const j = item.json;\n  results.push({\n    json: {\n      id: j.placeId || '',\n      company_name: j.title || '',\n      email: j.emails ? j.emails[0] : '',\n      website: j.website || '',\n      domain: j.website ? new URL(j.website).hostname.replace(/^www\\./, '') : '',\n      source: 'Apify - Google Maps',\n      status: 'pending',\n      added_at: new Date().toISOString()\n    }\n  });\n}\nreturn results;\n"
+      },
+      "name": "Parse Leads",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Leads!A:L",
+        "options": {}
+      },
+      "name": "Write to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Fetch Leads (Apify)": {
+      "main": [
+        [
+          "Parse Leads",
+          0
+        ]
+      ]
+    },
+    "Parse Leads": {
+      "main": [
+        [
+          "Write to Google Sheet",
+          0
+        ]
+      ]
+    }
+  }
+}
